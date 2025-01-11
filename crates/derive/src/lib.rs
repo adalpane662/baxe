@@ -1,16 +1,25 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Expr, Fields, Lit};
+use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput, Expr, Fields};
 
 #[proc_macro_attribute]
 pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
 
-    // Expect an enum as input
+    for attr in &input.attrs {
+        if attr.path().is_ident("baxe") {
+            let err = syn::Error::new(
+                attr.span(),
+                "The #[baxe(...)] attribute is only allowed on enum variants, not on the enum itself.",
+            );
+            return err.to_compile_error().into();
+        }
+    }
+
     let enum_name = input.ident;
     let data = match input.data {
         Data::Enum(data) => data,
-        _ => panic!("define_backend_error can only be applied to enums"),
+        _ => panic!("baxe::error can only be applied to enums"),
     };
 
     let variants_def = data
@@ -45,9 +54,60 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let (status, tag, code, message) = (attrs.status, attrs.tag, attrs.code, attrs.message);
 
             let pattern = match &variant.fields {
-                Fields::Unit => quote!(#enum_name::#variant_ident),
-                Fields::Unnamed(_) => quote!(#enum_name::#variant_ident(..)),
-                Fields::Named(_) => quote!(#enum_name::#variant_ident{..}),
+                Fields::Unit => quote! { 
+                    #enum_name::#variant_ident
+                },
+                Fields::Unnamed(ref fields) => {
+                    let field_patterns: Vec<_> = fields.unnamed.iter().enumerate().map(|(i, _)| {
+                        syn::Ident::new(&format!("arg{i}"), proc_macro2::Span::call_site())
+                    }).collect();
+                    quote! {
+                        #enum_name::#variant_ident(#(#field_patterns),*)
+                    }
+                }
+                Fields::Named(ref fields) => {
+                    let field_patterns: Vec<_> = fields.named.iter().map(|field| {
+                        field.ident.clone().unwrap()
+                    }).collect();
+                    quote! {
+                        #enum_name::#variant_ident { #(#field_patterns),* }
+                    }
+                }
+            };
+
+            let message = match &variant.fields {
+                Fields::Unit => quote! { 
+                    #enum_name::#variant_ident => { 
+                        write!(f, #message) 
+                    }
+                },
+                Fields::Unnamed(ref fields) => {
+                    let field_patterns: Vec<_> = fields.unnamed.iter().enumerate().map(|(i, _)| {
+                        // Generate a name for each field (e.g., `arg0`, `arg1`, ...)
+                        syn::Ident::new(&format!("arg{i}"), proc_macro2::Span::call_site())
+                    }).collect();
+            
+                    let field_names = &field_patterns; // Use the generated names for the format! arguments
+                    quote! {
+                        #enum_name::#variant_ident(#(#field_patterns),*) => {
+                            let formatted_message = format!(#message, #(#field_names),*);
+                            write!(f, "{formatted_message}")
+                        }
+                    }
+                }
+                Fields::Named(ref fields) => {
+                    let field_patterns: Vec<_> = fields.named.iter().map(|field| {
+                        field.ident.clone().unwrap() // Get the field name (e.g., `field_name`)
+                    }).collect();
+            
+                    let field_names = &field_patterns; // Use the field names for the format! arguments
+                    quote! {
+                        #enum_name::#variant_ident { #(#field_patterns),* } => {
+                            let formatted_message = format!(#message, #(#field_names),*);
+                            write!(f, "{formatted_message}")
+                        }
+                    }
+                }
             };
 
             (pattern, status, tag, code, message)
@@ -66,14 +126,14 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
         impl std::fmt::Display for #enum_name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
-                    #(#patterns => write!(f, #messages),)*
+                    #(#messages,)*
                 }
             }
         }
 
         impl std::error::Error for #enum_name {}
-
-        impl baxe::BackendError for #enum_name {
+        
+        impl crate::traits::BackendError for #enum_name {
             fn to_status_code(&self) -> axum::http::StatusCode {
                 match self {
                     #(#patterns => #statuses,)*
@@ -93,11 +153,12 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        impl From<#enum_name> for baxe::BaxeError {
+        impl From<#enum_name> for crate::BaxeError {
             fn from(error: #enum_name) -> Self {
+                use crate::traits::BackendError;
                 let status = error.to_status_code();
-                baxe::BaxeError {
-                    status_code: status,  // Store it separately since it's skipped in serialization
+                crate::BaxeError {
+                    status_code: status,
                     error_tag: error.to_error_tag().to_string(),
                     code: error.to_error_code(),
                     message: error.to_string(),
@@ -106,8 +167,8 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl IntoResponse for #enum_name {
-            fn into_response(self) -> Response {
-                (self.to_status_code(), Json(baxe::BaxeError::from(self))).into_response()
+            fn into_response(self) -> axum::response::Response {
+                (self.to_status_code(), Json(crate::BaxeError::from(self))).into_response()
             }
         }
     };
@@ -123,29 +184,24 @@ struct BaxeAttributes {
 }
 
 fn parse_baxe_attributes(variant: &syn::Variant) -> BaxeAttributes {
-    let mut status = None;
-    let mut tag = None;
-    let mut code = None;
-    let mut message = None;
+    let mut attrs = BaxeAttributes {
+        status: quote!(None),
+        tag: quote!(None),
+        code: quote!(None),
+        message: quote!(None),
+    };
 
     for attr in &variant.attrs {
         if attr.path().is_ident("baxe") {
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("status") {
-                    let value = meta.value()?;
-                    status = Some(value.parse::<Expr>()?);
-                } else if meta.path.is_ident("tag") {
-                    let value = meta.value()?;
-                    if let Lit::Str(lit) = value.parse()? {
-                        tag = Some(lit.value());
-                    }
-                } else if meta.path.is_ident("code") {
-                    let value = meta.value()?;
-                    code = Some(value.parse::<Expr>()?);
-                } else if meta.path.is_ident("message") {
-                    let value = meta.value()?;
-                    if let Lit::Str(lit) = value.parse()? {
-                        message = Some(lit.value());
+                let value = meta.value()?.parse::<Expr>()?;
+                if let Some(ident) = meta.path.get_ident().map(|ident| ident.to_string()) {
+                    match ident.as_str() {
+                        "status" => attrs.status = quote!(#value),
+                        "tag" => attrs.tag = quote!(#value),
+                        "code" => attrs.code = quote!(#value),
+                        "message" => attrs.message = quote!(#value),
+                        _ => {}
                     }
                 }
                 Ok(())
@@ -154,12 +210,7 @@ fn parse_baxe_attributes(variant: &syn::Variant) -> BaxeAttributes {
         }
     }
 
-    BaxeAttributes {
-        status: quote!(#status),
-        tag: quote!(#tag),
-        code: quote!(#code),
-        message: quote!(#message),
-    }
+    attrs
 }
 
 trait UnzipN<T1, T2, T3, T4, T5> {
