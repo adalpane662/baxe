@@ -12,7 +12,7 @@ pub use types::BaxeError;
 fn test_macro_generated_enum() {
     use baxe_derive::error;
     use axum::{http::StatusCode, response::IntoResponse, Json};
-    use crate::traits::BackendError;
+    use traits::BackendError;
 
 
     #[derive(Debug, thiserror::Error)]

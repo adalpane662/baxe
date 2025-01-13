@@ -83,11 +83,10 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 },
                 Fields::Unnamed(ref fields) => {
                     let field_patterns: Vec<_> = fields.unnamed.iter().enumerate().map(|(i, _)| {
-                        // Generate a name for each field (e.g., `arg0`, `arg1`, ...)
                         syn::Ident::new(&format!("arg{i}"), proc_macro2::Span::call_site())
                     }).collect();
             
-                    let field_names = &field_patterns; // Use the generated names for the format! arguments
+                    let field_names = &field_patterns;
                     quote! {
                         #enum_name::#variant_ident(#(#field_patterns),*) => {
                             let formatted_message = format!(#message, #(#field_names),*);
@@ -97,10 +96,10 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 Fields::Named(ref fields) => {
                     let field_patterns: Vec<_> = fields.named.iter().map(|field| {
-                        field.ident.clone().unwrap() // Get the field name (e.g., `field_name`)
+                        field.ident.clone().unwrap()
                     }).collect();
             
-                    let field_names = &field_patterns; // Use the field names for the format! arguments
+                    let field_names = &field_patterns;
                     quote! {
                         #enum_name::#variant_ident { #(#field_patterns),* } => {
                             let formatted_message = format!(#message, #(#field_names),*);
@@ -133,7 +132,7 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl std::error::Error for #enum_name {}
         
-        impl crate::traits::BackendError for #enum_name {
+        impl BackendError for #enum_name {
             fn to_status_code(&self) -> axum::http::StatusCode {
                 match self {
                     #(#patterns => #statuses,)*
@@ -153,11 +152,10 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        impl From<#enum_name> for crate::BaxeError {
+        impl From<#enum_name> for BaxeError {
             fn from(error: #enum_name) -> Self {
-                use crate::traits::BackendError;
                 let status = error.to_status_code();
-                crate::BaxeError {
+                BaxeError {
                     status_code: status,
                     error_tag: error.to_error_tag().to_string(),
                     code: error.to_error_code(),
@@ -168,7 +166,7 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl IntoResponse for #enum_name {
             fn into_response(self) -> axum::response::Response {
-                (self.to_status_code(), Json(crate::BaxeError::from(self))).into_response()
+                (self.to_status_code(), Json(BaxeError::from(self))).into_response()
             }
         }
     };
