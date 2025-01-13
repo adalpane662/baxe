@@ -25,14 +25,24 @@ cargo add baxe
 ```rust
 use baxe::BackendError; // Import the trait
 
+// Optional: thiserror definitions work with baxe too 
+#[derive(Debug, thiserror::Error)]
+pub enum EmailValidationError {
+    #[error("Email address syntax is invalid: received '{0}', expected value matching '{1}'")]
+    InvalidSyntax(String, String),
+    #[error("Email domain is unknown")]
+    UnknownDomain
+}
+
+
 #[baxe::error] // Use the macro to define your errors
 pub enum BackendErrors {
-    #[baxe(status = StatusCode::BAD_REQUEST, tag = "bad_request", code = 400, message = "Bad request")]
+    #[baxe(status = StatusCode::BAD_REQUEST, tag = "bad_request", code = 400, message = "Bad request: {0}")]
     BadRequest(String),
     #[baxe(status = StatusCode::UNAUTHORIZED, tag = "auth/invalid_email_or_password", code = 10_000, message = "Invalid email or password")]
     InvalidEmailOrPassword,
-    #[baxe(status = StatusCode::BAD_REQUEST, tag = "auth/invalid_email_format", code = 10_001, message = "Invalid email format")]
-    InvalidEmailFormat,
+    #[baxe(status = StatusCode::BAD_REQUEST, tag = "auth/invalid_email_format", code = 10_001, message = "Invalid email format: {0}")]
+    InvalidEmailFormat(EmailValidationError),
 }
 ```
 
@@ -41,14 +51,22 @@ Example axum handler:
 ```rust
 pub async fn handler() -> Result<Json<String>, BaxeError> {
     if let Err(e) = validate_email(email) {
-        return Err(BackendErrors::InvalidEmailFormat.into());
+        let err = BackendErrors::InvalidEmailFormat(e);
+        tracing::error!("Error from validate_email(): {err}");
+        return Err(err.into());
     }
 
     Ok(Json("Hello, world!".to_string()))
 }
 ```
 
-automatically generates the following response in case of error:
+The above code allows to log a descriptive error:
+
+```bash
+2025-01-10T09:58:56.677274Z  ERROR my_app:handlers: Error from validate_email(): Invalid email format: Email address syntax is invalid: received 'example.com', expected value matching '^[^@]+@[^@]+\.[^@]+$'"
+```
+
+and automatically generates the following response in case of error:
 
 ```rust
 pub struct BaxeError {
