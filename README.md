@@ -23,7 +23,7 @@ cargo add baxe
 ## Usage
 
 ```rust
-use baxe::BackendError; // Import the trait
+use baxe::{BaxeError, BackendError}; // Import required type and trait
 
 // Optional: thiserror definitions work with baxe too 
 #[derive(Debug, thiserror::Error)]
