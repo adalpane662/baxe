@@ -3,7 +3,23 @@ use quote::quote;
 use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput, Expr, Fields};
 
 #[proc_macro_attribute]
-pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn error(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input_attrs = attr.to_string();
+
+    let mut log_message_with = None;
+    let mut hide_message = false;
+
+    for part in input_attrs.split(',') {
+        let part = part.trim();
+        if part.starts_with("logMessageWith=") {
+            if let Some((_, value)) = part.split_once('=') {
+                log_message_with = Some(syn::parse_str::<Expr>(&value.trim().to_string()).unwrap());
+            }
+        } else if part == "hideMessage" {
+            hide_message = true;
+        }
+    }
+
     let input = parse_macro_input!(item as DeriveInput);
 
     for attr in &input.attrs {
@@ -116,6 +132,24 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let (patterns, statuses, tags, codes, messages): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
         matches.into_iter().unzip_n_vec();
 
+    let log_statement = if let Some(log_fn) = log_message_with {
+        quote! {
+            #log_fn!("{}", error.to_string());
+        }
+    } else {
+        quote! {}
+    };
+
+    let to_message = if hide_message {
+        quote! {
+            "".to_string()
+        }
+    } else {
+        quote! {
+            error.to_string()
+        }
+    };
+
     let expanded = quote! {
         #[derive(Debug)]
         pub enum #enum_name {
@@ -154,12 +188,13 @@ pub fn error(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl From<#enum_name> for BaxeError {
             fn from(error: #enum_name) -> Self {
+                #log_statement
                 let status = error.to_status_code();
                 BaxeError {
                     status_code: status,
                     error_tag: error.to_error_tag().to_string(),
                     code: error.to_error_code(),
-                    message: error.to_string(),
+                    message: #to_message,
                 }
             }
         }

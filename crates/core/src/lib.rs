@@ -26,7 +26,7 @@ fn test_macro_generated_enum() {
     enum AppError {
         #[baxe(status = StatusCode::NOT_FOUND, tag = "NOT_FOUND", code = 404, message = "Resource not found")]
         NotFound,
-        #[baxe(status = StatusCode::INTERNAL_SERVER_ERROR, tag = "SERVER_ERROR", code = 5000, message = "Internal server error")]
+        #[baxe(status = StatusCode::INTERNAL_SERVER_ERROR, tag = "SERVER_ERROR", code = 500, message = "Internal server error")]
         InternalServerError,
         #[baxe(status = StatusCode::BAD_REQUEST, tag = "BAD_REQUEST", code = 4000, message = "Bad request data: {0}, requests {1:?}")]
         BadRequest(String, Vec<usize>),
@@ -35,7 +35,6 @@ fn test_macro_generated_enum() {
         
     }
 
-    // Test trait implementations
     let not_found = AppError::NotFound;
     assert_eq!(not_found.to_status_code(), StatusCode::NOT_FOUND);
     assert_eq!(not_found.to_error_tag(), "NOT_FOUND");

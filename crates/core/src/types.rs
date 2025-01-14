@@ -8,6 +8,7 @@ use serde::Serialize;
 pub struct BaxeError {
     #[serde(skip)]
     pub status_code: StatusCode,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub message: String,
     pub code: u16,
     pub error_tag: String,
