@@ -22,6 +22,13 @@ cargo add baxe
 
 ## Usage
 
+### Attributes
+
+ * `logMessageWith`: allows to use a logger to log the error message before sending the response
+ * `hideMessage`: allows to exclude the message from the body of the response
+
+### Example
+
 ```rust
 use baxe::{BaxeError, BackendError}; // Import required type and trait
 
@@ -35,7 +42,7 @@ pub enum EmailValidationError {
 }
 
 
-#[baxe::error] // Use the macro to define your errors
+#[baxe::error(logMessageWith=tracing::error, hideMessage)] // Use the macro to define your errors
 pub enum BackendErrors {
     #[baxe(status = StatusCode::BAD_REQUEST, tag = "bad_request", code = 400, message = "Bad request: {0}")]
     BadRequest(String),
@@ -51,9 +58,7 @@ Example axum handler:
 ```rust
 pub async fn handler() -> Result<Json<String>, BaxeError> {
     if let Err(e) = validate_email(email) {
-        let err = BackendErrors::InvalidEmailFormat(e);
-        tracing::error!("Error from validate_email(): {err}");
-        return Err(err.into());
+        return Err(BackendErrors::InvalidEmailFormat(e).into());
     }
 
     Ok(Json("Hello, world!".to_string()))
@@ -81,7 +86,6 @@ that translates to the following json response:
 
 ```json
 {
-  "message": "Invalid email format",
   "code": 10001,
   "error_tag": "auth/invalid_email_format"
 }
