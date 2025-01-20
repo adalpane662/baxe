@@ -142,11 +142,11 @@ pub fn error(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let to_message = if hide_message {
         quote! {
-            "".to_string()
+            None
         }
     } else {
         quote! {
-            error.to_string()
+            error.to_string().into()
         }
     };
 
@@ -173,7 +173,7 @@ pub fn error(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
 
-            fn to_error_tag(&self) -> &str {
+            fn to_error_tag(&self) -> impl std::fmt::Display {
                 match self {
                     #(#patterns => #tags,)*
                 }
@@ -190,12 +190,8 @@ pub fn error(attr: TokenStream, item: TokenStream) -> TokenStream {
             fn from(error: #enum_name) -> Self {
                 #log_statement
                 let status = error.to_status_code();
-                BaxeError {
-                    status_code: status,
-                    error_tag: error.to_error_tag().to_string(),
-                    code: error.to_error_code(),
-                    message: #to_message,
-                }
+                let tag: String = error.to_error_tag().to_string();
+                BaxeError::new(status, #to_message, error.to_error_code(), tag)
             }
         }
 
