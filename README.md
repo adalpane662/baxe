@@ -30,7 +30,9 @@ cargo add baxe
 ### Example
 
 ```rust
-use baxe::{BaxeError, BackendError}; // Import required type and trait
+use baxe::{baxe_error, BackendError}; 
+
+baxe_error!(String, serde(rename_all = "camelCase"), derive(Clone));
 
 // Optional: thiserror definitions work with baxe too 
 #[derive(Debug, thiserror::Error)]
@@ -71,23 +73,27 @@ The above code allows to log a descriptive error:
 2025-01-10T09:58:56.677274Z  ERROR my_app:handlers: Error from validate_email(): Invalid email format: Email address syntax is invalid: received 'example.com', expected value matching '^[^@]+@[^@]+\.[^@]+$'"
 ```
 
-and automatically generates the following response in case of error:
+and automatically generates the following error response type:
 
 ```rust
+#[derive(std::fmt::Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BaxeError {
-    pub status_code: StatusCode,
+    #[serde(skip)]
+    pub status_code: axum::http::StatusCode,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub message: String,
     pub code: u16,
     pub error_tag: String,
 }
 ```
 
-that translates to the following json response:
+that is serialized to the following json response:
 
 ```json
 {
   "code": 10001,
-  "error_tag": "auth/invalid_email_format"
+  "errorTag": "auth/invalid_email_format"
 }
 ```
 
