@@ -70,7 +70,7 @@ pub async fn handler() -> Result<Json<String>, BaxeError> {
 The above code allows to log a descriptive error:
 
 ```bash
-2025-01-10T09:58:56.677274Z  ERROR my_app:handlers: Error from validate_email(): Invalid email format: Email address syntax is invalid: received 'example.com', expected value matching '^[^@]+@[^@]+\.[^@]+$'"
+2025-01-10T09:58:56.677274Z  ERROR my_app:handlers: Invalid email format: Email address syntax is invalid: received 'example.com', expected value matching '^[^@]+@[^@]+\.[^@]+$'"
 ```
 
 and automatically generates the following error response type:
@@ -78,11 +78,12 @@ and automatically generates the following error response type:
 ```rust
 #[derive(std::fmt::Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Clone)]
 pub struct BaxeError {
     #[serde(skip)]
     pub status_code: axum::http::StatusCode,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     pub code: u16,
     pub error_tag: String,
 }
