@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "baxe"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "axum",
  "baxe-derive",
@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "baxe-derive"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "proc-macro2",
  "quote",

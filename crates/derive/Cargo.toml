@@ -1,6 +1,6 @@
 [package]
 name = "baxe-derive"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "Procedural macro for Baxe library."
 license = "MIT"
@@ -10,6 +10,6 @@ repository = "https://github.com/zyphelabs/baxe"
 proc-macro = true
 
 [dependencies]
-syn = "2.0.87"
-quote = "1.0.37"
-proc-macro2 = "1.0.89"
+syn = "2"
+quote = "1"
+proc-macro2 = "1"
